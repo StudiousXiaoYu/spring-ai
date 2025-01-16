@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 the original author or authors.
+ * Copyright 2023-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,7 +60,6 @@ import com.datastax.oss.driver.api.querybuilder.schema.CreateTable;
 import com.datastax.oss.driver.api.querybuilder.schema.CreateTableStart;
 import com.datastax.oss.driver.shaded.guava.common.annotations.VisibleForTesting;
 import com.datastax.oss.driver.shaded.guava.common.base.Preconditions;
-import io.micrometer.observation.ObservationRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,7 +79,6 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionConverter;
 import org.springframework.ai.vectorstore.observation.AbstractObservationVectorStore;
 import org.springframework.ai.vectorstore.observation.VectorStoreObservationContext;
-import org.springframework.ai.vectorstore.observation.VectorStoreObservationConvention;
 import org.springframework.util.Assert;
 
 /**
@@ -217,8 +215,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 
 	private final boolean closeSessionOnClose;
 
-	private final BatchingStrategy batchingStrategy;
-
 	private final ConcurrentMap<Set<String>, PreparedStatement> addStmts = new ConcurrentHashMap<>();
 
 	private final PreparedStatement deleteStmt;
@@ -226,31 +222,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 	private final String similarityStmt;
 
 	private final Similarity similarity;
-
-	// TODO: Remove this flag as the document no longer holds embeddings.
-	@Deprecated(since = "1.0.0-M5", forRemoval = true)
-	private final boolean returnEmbeddings;
-
-	/**
-	 * @deprecated since 1.0.0-M5, use {@link #builder(EmbeddingModel)} ()} instead
-	 */
-	@Deprecated(since = "1.0.0-M5", forRemoval = true)
-	public CassandraVectorStore(CassandraVectorStoreConfig conf, EmbeddingModel embeddingModel) {
-		this(conf, embeddingModel, ObservationRegistry.NOOP, null, new TokenCountBatchingStrategy());
-	}
-
-	/**
-	 * @deprecated since 1.0.0-M5, use {@link #builder(EmbeddingModel)} ()} instead
-	 */
-	@Deprecated(since = "1.0.0-M5", forRemoval = true)
-	public CassandraVectorStore(CassandraVectorStoreConfig conf, EmbeddingModel embeddingModel,
-			ObservationRegistry observationRegistry, VectorStoreObservationConvention customObservationConvention,
-			BatchingStrategy batchingStrategy) {
-		this(builder(embeddingModel).session(conf.session)
-			.observationRegistry(observationRegistry)
-			.customObservationConvention(customObservationConvention)
-			.batchingStrategy(batchingStrategy));
-	}
 
 	protected CassandraVectorStore(Builder builder) {
 		super(builder);
@@ -264,7 +235,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 		this.primaryKeyTranslator = builder.primaryKeyTranslator;
 		this.executor = Executors.newFixedThreadPool(builder.fixedThreadPoolExecutorSize);
 		this.closeSessionOnClose = builder.closeSessionOnClose;
-		this.batchingStrategy = builder.batchingStrategy;
 
 		ensureSchemaExists(embeddingModel.dimensions());
 		prepareAddStatement(Set.of());
@@ -281,8 +251,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 
 		this.filterExpressionConverter = builder.filterExpressionConverter != null ? builder.filterExpressionConverter
 				: new CassandraFilterExpressionConverter(cassandraMetadata.getColumns().values());
-
-		this.returnEmbeddings = builder.returnEmbeddings;
 	}
 
 	public static Builder builder(EmbeddingModel embeddingModel) {
@@ -470,9 +438,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 		StringBuilder extraSelectFields = new StringBuilder();
 		for (var m : this.schema.metadataColumns()) {
 			extraSelectFields.append(',').append(m.name());
-		}
-		if (this.returnEmbeddings) {
-			extraSelectFields.append(',').append(this.schema.embedding());
 		}
 
 		// java-driver-query-builder doesn't support orderByAnnOf yet
@@ -807,8 +772,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 
 		private int fixedThreadPoolExecutorSize = DEFAULT_ADD_CONCURRENCY;
 
-		private BatchingStrategy batchingStrategy = new TokenCountBatchingStrategy();
-
 		private FilterExpressionConverter filterExpressionConverter;
 
 		private DocumentIdTranslator documentIdTranslator = (String id) -> List.of(id);
@@ -944,18 +907,6 @@ public class CassandraVectorStore extends AbstractObservationVectorStore impleme
 		 */
 		public Builder disallowSchemaChanges(boolean disallowSchemaChanges) {
 			this.disallowSchemaChanges = disallowSchemaChanges;
-			return this;
-		}
-
-		/**
-		 * Sets the batching strategy.
-		 * @param batchingStrategy the batching strategy to use
-		 * @return the builder instance
-		 * @throws IllegalArgumentException if batchingStrategy is null
-		 */
-		public Builder batchingStrategy(BatchingStrategy batchingStrategy) {
-			Assert.notNull(batchingStrategy, "BatchingStrategy must not be null");
-			this.batchingStrategy = batchingStrategy;
 			return this;
 		}
 
