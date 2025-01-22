@@ -170,4 +170,88 @@ public class HunYuanAuthApi {
 				headers.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.of(e.getValue()))));
 	}
 
+	public MultiValueMap<String, String> getHttpHeadersConsumer(String host, String action, String service, byte[] body) {
+		String version = HunYuanConstants.DEFAULT_VERSION;
+		String algorithm = HunYuanConstants.DEFAULT_ALGORITHM;
+		// String timestamp = "1551113065";
+		String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		// Pay attention to the time zone, otherwise it will be easy to make mistakes
+		sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+		String date = sdf.format(new Date(Long.valueOf(timestamp + "000")));
+
+		// ************* Step 1: Splice specification request strings *************
+		String httpRequestMethod = "POST";
+		String canonicalUri = "/";
+		String canonicalQueryString = "";
+		String canonicalHeaders = "content-type:application/json; charset=utf-8\n" + "host:" + host + "\n"
+				+ "x-tc-action:" + action.toLowerCase() + "\n";
+		String signedHeaders = "content-type;host;x-tc-action";
+
+		// String payload = "{\"Limit\": 1, \"Filters\": [{\"Values\":
+		// [\"\\u672a\\u547d\\u540d\"], \"Name\": \"instance-name\"}]}";
+//		String payloadString = ModelOptionsUtils.toJsonString(payload);
+		System.out.println(new String(body, UTF8));
+		String hashedRequestPayload = sha256Hex(new String(body, UTF8));
+		String canonicalRequest = httpRequestMethod + "\n" + canonicalUri + "\n" + canonicalQueryString + "\n"
+				+ canonicalHeaders + "\n" + signedHeaders + "\n" + hashedRequestPayload;
+		// ************* Step 2: Splice the string to be signed *************
+		String credentialScope = date + "/" + service + "/" + "tc3_request";
+		String hashedCanonicalRequest = sha256Hex(canonicalRequest);
+		String stringToSign = algorithm + "\n" + timestamp + "\n" + credentialScope + "\n" + hashedCanonicalRequest;
+		// ************* Step 3: Calculate the signature *************
+		byte[] secretDate = hmac256(("TC3" + secretKey).getBytes(UTF8), date);
+		byte[] secretService = hmac256(secretDate, service);
+		byte[] secretSigning = hmac256(secretService, "tc3_request");
+		String signature = DatatypeConverter.printHexBinary(hmac256(secretSigning, stringToSign)).toLowerCase();
+		// ************* Step 4: Splice Authorization *************
+		String authorization = algorithm + " " + "Credential=" + secretId + "/" + credentialScope + ", "
+				+ "SignedHeaders=" + signedHeaders + ", " + "Signature=" + signature;
+
+		TreeMap<String, String> headers = new TreeMap<String, String>();
+		headers.put("Authorization", authorization);
+//		headers.put("Content-Type", CT_JSON);
+		// headers.put("Host", host);
+		headers.put("X-TC-Action", action);
+		headers.put("X-TC-Timestamp", timestamp);
+		headers.put("X-TC-Version", version);
+
+			StringBuilder sb = new StringBuilder();
+			sb.append("curl -X POST https://")
+					.append(host)
+					.append(" -H \"Authorization: ")
+					.append(authorization)
+					.append("\"")
+					.append(" -H \"Content-Type: application/json; charset=utf-8\"")
+					.append(" -H \"Host: ")
+					.append(host)
+					.append("\"")
+					.append(" -H \"X-TC-Action: ")
+					.append(action)
+					.append("\"")
+					.append(" -H \"X-TC-Timestamp: ")
+					.append(timestamp)
+					.append("\"")
+					.append(" -H \"X-TC-Version: ")
+					.append(version)
+					.append("\"")
+					.append(" -d '")
+					.append(new String(body, UTF8))
+					.append("'");
+			logger.info(sb.toString());
+		return CollectionUtils.toMultiValueMap(
+				headers.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.of(e.getValue()))));
+	}
+
+	private String sha256HexByByte(byte[] body) {
+		MessageDigest md = null;
+		try {
+			md = MessageDigest.getInstance("SHA-256");
+		}
+		catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		}
+		byte[] d = md.digest(body);
+		return DatatypeConverter.printHexBinary(d).toLowerCase();
+	}
 }

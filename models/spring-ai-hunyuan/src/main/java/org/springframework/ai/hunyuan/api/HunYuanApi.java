@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.hunyuan.api.auth.HunYuanAuthApi;
+import org.springframework.ai.hunyuan.api.auth.HunYuanAuthenticationInterceptor;
 import org.springframework.util.MultiValueMap;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -41,6 +42,8 @@ import org.springframework.util.Assert;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
+
+import static org.springframework.ai.hunyuan.api.HunYuanConstants.CT_JSON;
 
 /**
  * Single-class, Java Client library for HunYuan platform. Provides implementation for the
@@ -97,12 +100,13 @@ public class HunYuanApi {
 			ResponseErrorHandler responseErrorHandler) {
 
 		Consumer<HttpHeaders> jsonContentHeaders = headers -> {
-			headers.setContentType(MediaType.APPLICATION_JSON);
+			headers.setContentType(MediaType.valueOf(CT_JSON));
 		};
 		hunyuanAuthApi = new HunYuanAuthApi(secretId, secretKey);
 		this.restClient = restClientBuilder.baseUrl(baseUrl)
 			.defaultHeaders(jsonContentHeaders)
 			.defaultStatusHandler(responseErrorHandler)
+			.requestInterceptor(new HunYuanAuthenticationInterceptor(secretId, secretKey))
 			.build();
 
 		this.webClient = WebClient.builder().baseUrl(baseUrl).defaultHeaders(jsonContentHeaders).build();
@@ -121,11 +125,9 @@ public class HunYuanApi {
 		String host = HunYuanConstants.DEFAULT_CHAT_HOST;
 		// String region = "ap-guangzhou";
 		String action = HunYuanConstants.DEFAULT_CHAT_ACTION;
-		MultiValueMap<String, String> jsonContentHeaders = hunyuanAuthApi.getHttpHeadersConsumer(host, action, service,
-				chatRequest);
-		ResponseEntity<String> retrieve = this.restClient.post().uri("/").headers(headers -> {
-			headers.addAll(jsonContentHeaders);
-		}).body(chatRequest).retrieve().toEntity(String.class);
+//		MultiValueMap<String, String> jsonContentHeaders = hunyuanAuthApi.getHttpHeadersConsumer(host, action, service,
+//				chatRequest);
+		ResponseEntity<String> retrieve = this.restClient.post().uri("/").body(chatRequest).retrieve().toEntity(String.class);
 		// Compatible Return Position text/plain
 		logger.info("Response body: {}", retrieve.getBody());
 		ChatCompletionResponse chatCompletionResponse = ModelOptionsUtils.jsonToObject(retrieve.getBody(),

@@ -56,6 +56,20 @@ public class FunctionCallbackInPromptIT {
 				RestClientAutoConfiguration.class, HunYuanAutoConfiguration.class));
 
 	@Test
+	void listMessageTest() {
+		this.contextRunner.run(context -> {
+
+			HunYuanChatModel chatModel = context.getBean(HunYuanChatModel.class);
+			var promptOptions = HunYuanChatOptions.builder()
+					.build();
+
+			ChatResponse response = chatModel.call(new Prompt(List.of(new UserMessage(
+					"你好，你是谁？")), promptOptions));
+
+			logger.info("Response: {}", response);
+		});
+	}
+	@Test
 	void functionCallTest() {
 		this.contextRunner.run(context -> {
 
