@@ -60,19 +60,11 @@ public class FunctionCallbackInPromptIT {
 		this.contextRunner.run(context -> {
 
 			HunYuanChatModel chatModel = context.getBean(HunYuanChatModel.class);
-
-			UserMessage userMessage = new UserMessage(
-					"What's the weather like in San Francisco, Tokyo, and Paris? Return the temperature in Celsius");
-
 			var promptOptions = HunYuanChatOptions.builder()
-				.functionCallbacks(List.of(FunctionCallback.builder()
-					.function("CurrentWeatherService", new MockWeatherService())
-					.description("Get the weather in location")
-					.inputType(MockWeatherService.Request.class)
-					.build()))
-				.build();
+					.build();
 
-			ChatResponse response = chatModel.call(new Prompt(List.of(userMessage), promptOptions));
+			ChatResponse response = chatModel.call(new Prompt(List.of(new UserMessage(
+					"你好，你是谁？"+"😊")), promptOptions));
 
 			logger.info("Response: {}", response);
 
